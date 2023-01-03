@@ -12,11 +12,18 @@ namespace HighResolutionDateTime
     /// </summary>
     internal class StopwatchDateTime : IDisposable
     {
-        private readonly long _maxIdleTime = TimeSpan.FromSeconds(10).Ticks;
+        // Time after which it is necessary to synchronize _startTimestamp with System.DateTime to avoid drifts
+        internal long _maxIdleTime = TimeSpan.FromSeconds(10).Ticks;
 
         private readonly ThreadLocal<double> _startTimestamp;
 
         private readonly ThreadLocal<System.DateTime> _startTime;
+
+        // https://referencesource.microsoft.com/#system/services/monitoring/system/diagnosticts/Stopwatch.cs
+        // performance-counter frequency, in counts per ticks.
+        // This can speed up conversion from high frequency performance-counter 
+        // to ticks.
+        private static readonly double tickFrequency = TimeSpan.TicksPerSecond / Stopwatch.Frequency;
 
         /// <summary>
         /// Creates an instance of the <see cref="StopwatchDateTime"/>.
@@ -45,7 +52,8 @@ namespace HighResolutionDateTime
             {
                 double endTimestamp = Stopwatch.GetTimestamp();
 
-                var durationInTicks = (endTimestamp - _startTimestamp.Value) / Stopwatch.Frequency * TimeSpan.TicksPerSecond;
+                // convert high resolution perf counter to DateTime ticks
+                var durationInTicks = (endTimestamp - _startTimestamp.Value) * tickFrequency;
                 if (durationInTicks >= _maxIdleTime)
                 {
                     if (DateTime.isAccurateButSlow)
@@ -58,7 +66,7 @@ namespace HighResolutionDateTime
                     return _startTime.Value;
                 }
 
-                return _startTime.Value.AddTicks((long)durationInTicks);
+                return _startTime.Value.AddTicks(unchecked((long)durationInTicks));
             }
         }
 

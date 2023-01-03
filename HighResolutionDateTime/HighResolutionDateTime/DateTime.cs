@@ -30,6 +30,24 @@ namespace HighResolutionDateTime
         public static StopwatchDateTimeDisposalState StopwatchDateTimeDisposalState { get; private set; }
         // full name is waitForSystemDateTimeToChangeIfGetSystemTimePreciseAsFileTimeIsNotAvailable
         public static bool isAccurateButSlow = true;
+        public static long? StopwatchDateTimeMaxIdleTime
+        {
+            get
+            {
+                if (source != HighResolutionDateTimeSource.Stopwatch)
+                {
+                    return null;
+                }
+                return StopwatchDateTime._maxIdleTime;
+            }
+            set
+            {
+                if ((source == HighResolutionDateTimeSource.Stopwatch) && value.HasValue)
+                {
+                    StopwatchDateTime._maxIdleTime = value.Value;
+                }
+            }
+        }
 
 #endif
 #if FEATURE_NETCORE

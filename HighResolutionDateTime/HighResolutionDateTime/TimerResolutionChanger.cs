@@ -6,12 +6,6 @@ namespace HighResolutionDateTime
 {
     public static class TimerResolutionChanger
     {
-        /* [DllImport("winmm.dll", EntryPoint = "timeBeginPeriod", SetLastError = true)]
-        public static extern uint TimeBeginPeriod(uint uMilliseconds);
-
-        [DllImport("winmm.dll", EntryPoint = "timeEndPeriod", SetLastError = true)]
-        public static extern uint TimeEndPeriod(uint uMilliseconds); */
-
         [DllImport("ntdll.dll", SetLastError = true)]
         private static extern uint NtQueryTimerResolution(out uint min, out uint max, out uint current);
 
