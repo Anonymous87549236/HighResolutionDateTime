@@ -11,14 +11,16 @@ namespace HighResolutionDateTime
     using System.Runtime.InteropServices;
     using System.Runtime.CompilerServices;
     using System.Diagnostics.Contracts;
+    using System.Security;
 
     // https://referencesource.microsoft.com/#system/services/monitoring/system/diagnosticts/Stopwatch.cs
     // This class uses high-resolution performance counter if installed hardware
-    // does not (mistake?) support it. Otherwise, the class will fall back to
-    // System.DateTime class.
+    // supports it. Otherwise, the class will fall back to System.DateTime class.
 
     public static class DateTime
     {
+        // https://programtalk.com/vs4/csharp/Abc-Arbitrage/ZeroLog/src/ZeroLog/Utils/HighResolutionDateTime.cs/
+#if !NETCOREAPP
         // Number of 100ns ticks per time unit
         private const long TicksPerMillisecond = 10000;
 
@@ -26,21 +28,29 @@ namespace HighResolutionDateTime
         public static readonly HighResolutionDateTimeSource source;
         private static StopwatchDateTime StopwatchDateTime;
         public static StopwatchDateTimeDisposalState StopwatchDateTimeDisposalState { get; private set; }
+        // full name is waitForSystemDateTimeToChangeIfGetSystemTimePreciseAsFileTimeIsNotAvailable
+        public static bool isAccurateButSlow = true;
 
+#endif
 #if FEATURE_NETCORE
         [SecuritySafeCritical]
 #endif
         static DateTime()
         {
+#if !NETCOREAPP
             // https://manski.net/2014/07/high-resolution-clock-in-csharp/#high-resolution-clock
-            try
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                long ticks;
-                GetSystemTimePreciseAsFileTime(out ticks);
-                source = HighResolutionDateTimeSource.GetSystemTimePreciseAsFileTime;
+                try
+                {
+                    long ticks;
+                    GetSystemTimePreciseAsFileTime(out ticks);
+                    source = HighResolutionDateTimeSource.GetSystemTimePreciseAsFileTime;
+                }
+                // Not running Windows 8, Windows Server 2012 or higher.
+                catch (DllNotFoundException) { }
+                catch (EntryPointNotFoundException) { }
             }
-            // Not running Windows 8, Windows Server 2012 or higher.
-            catch (EntryPointNotFoundException) { }
             if ((source < HighResolutionDateTimeSource.Stopwatch) && System.Diagnostics.Stopwatch.IsHighResolution)
             {
                 source = HighResolutionDateTimeSource.Stopwatch;
@@ -53,14 +63,22 @@ namespace HighResolutionDateTime
                 case HighResolutionDateTimeSource.Stopwatch:
                     StopwatchDateTime = new StopwatchDateTime();
                     StopwatchDateTimeDisposalState = StopwatchDateTimeDisposalState.NotDisposed;
+                    goto default;
+                default:
+                    TimerResolutionChanger.SetTimerResolutionToMax();
                     break;
             }
+#endif
         }
 
         // Returns a DateTime representing the current date and time.
         //
         public static System.DateTime Now
         {
+#if NETCOREAPP
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => System.DateTime.Now;
+#else
             get
             {
                 Contract.Ensures(Contract.Result<System.DateTime>().Kind == DateTimeKind.Local);
@@ -75,7 +93,6 @@ namespace HighResolutionDateTime
                         // Windows Phone 7.0/7.1 return the ticks up to millisecond, not up to the 100th nanosecond.
                         if (CompatibilitySwitches.IsAppEarlierThanWindowsPhone8)
                         {
-                            // ticks = ticks. Bug?
                             long ticksms = ticks / TicksPerMillisecond;
                             ticks = ticksms * TicksPerMillisecond;
                         }
@@ -84,14 +101,24 @@ namespace HighResolutionDateTime
                     case HighResolutionDateTimeSource.Stopwatch:
                         return StopwatchDateTime.UtcNow.ToLocalTime();
                     default:
+                        if (isAccurateButSlow)
+                        {
+                            var previousDateTime = System.DateTime.UtcNow;
+                            while (previousDateTime == System.DateTime.UtcNow) { }
+                        }
                         return System.DateTime.Now;
                 }
             }
+#endif
         }
 
         public static System.DateTime UtcNow
         {
             [System.Security.SecuritySafeCritical]  // auto-generated
+#if NETCOREAPP
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => System.DateTime.UtcNow;
+#else
             get
             {
                 Contract.Ensures(Contract.Result<System.DateTime>().Kind == DateTimeKind.Utc);
@@ -107,7 +134,6 @@ namespace HighResolutionDateTime
                         // Windows Phone 7.0/7.1 return the ticks up to millisecond, not up to the 100th nanosecond.
                         if (CompatibilitySwitches.IsAppEarlierThanWindowsPhone8)
                         {
-                            // ticks = ticks. Bug?
                             long ticksms = ticks / TicksPerMillisecond;
                             ticks = ticksms * TicksPerMillisecond;
                         }
@@ -116,9 +142,15 @@ namespace HighResolutionDateTime
                     case HighResolutionDateTimeSource.Stopwatch:
                         return StopwatchDateTime.UtcNow;
                     default:
+                        if (isAccurateButSlow)
+                        {
+                            var previousDateTime = System.DateTime.UtcNow;
+                            while (previousDateTime == System.DateTime.UtcNow) { }
+                        }
                         return System.DateTime.UtcNow;
                 }
             }
+#endif
         }
 
         // Returns a DateTime representing the current date. The date part
@@ -127,16 +159,22 @@ namespace HighResolutionDateTime
         //
         public static System.DateTime Today
         {
+#if NETCOREAPP
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => System.DateTime.Today;
+#else
             get
             {
                 return DateTime.Now.Date;
             }
+#endif
         }
 
+#if !NETCOREAPP
+        [SuppressUnmanagedCodeSecurity]
         [System.Security.SecurityCritical]  // auto-generated
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
         [DllImport("Kernel32.dll", CallingConvention = CallingConvention.Winapi)]
-        // internal static extern long GetSystemTimePreciseAsFileTime(); // does not work
         internal static extern void GetSystemTimePreciseAsFileTime(out long lpSystemTimeAsFileTime);
 
         public static void StopwatchDateTimeDispose()
@@ -158,5 +196,6 @@ namespace HighResolutionDateTime
             StopwatchDateTime = new StopwatchDateTime();
             StopwatchDateTimeDisposalState = StopwatchDateTimeDisposalState.NotDisposed;
         }
+#endif
     }
 }

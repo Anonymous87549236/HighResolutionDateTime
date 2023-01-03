@@ -13,20 +13,31 @@ namespace HighResolutionDateTime
     internal class StopwatchDateTime : IDisposable
     {
         private readonly long _maxIdleTime = TimeSpan.FromSeconds(10).Ticks;
-        private const long TicksMultiplier = 1000 * TimeSpan.TicksPerMillisecond;
 
-        private readonly ThreadLocal<double> _startTimestamp =
-            new ThreadLocal<double>(() => Stopwatch.GetTimestamp(), false);
+        private readonly ThreadLocal<double> _startTimestamp;
 
-        private readonly ThreadLocal<System.DateTime> _startTime =
-            new ThreadLocal<System.DateTime>(() => System.DateTime.UtcNow, false);
+        private readonly ThreadLocal<System.DateTime> _startTime;
 
         /// <summary>
         /// Creates an instance of the <see cref="StopwatchDateTime"/>.
         /// </summary>
         public StopwatchDateTime()
         {
-
+            /* To minimize forward time jumps. Example
+            System.DateTime.UtcNow update period = 15,625ms
+            System.DateTime.UtcNow updated and became equal to 1
+            _startTime updated after 15ms
+            Shortly before _maxIdleTime StopwatchDateTime.UtcNow was called and returned almost 11
+            System.DateTime.UtcNow updated after 625us
+            Right after that StopwatchDateTime.UtcNow was called and returned 11,015625s
+            So a 15ms delay in reading System.DateTime.UtcNow caused the return value to change by 15.625ms in just 625us */
+            if (DateTime.isAccurateButSlow)
+            {
+                var previousDateTime = System.DateTime.UtcNow;
+                while (previousDateTime == System.DateTime.UtcNow) { }
+            }
+            _startTimestamp = new ThreadLocal<double>(() => Stopwatch.GetTimestamp(), false);
+            _startTime = new ThreadLocal<System.DateTime>(() => System.DateTime.UtcNow, false);
         }
         public System.DateTime UtcNow
         {
@@ -34,9 +45,14 @@ namespace HighResolutionDateTime
             {
                 double endTimestamp = Stopwatch.GetTimestamp();
 
-                var durationInTicks = (endTimestamp - _startTimestamp.Value) / Stopwatch.Frequency * TicksMultiplier;
+                var durationInTicks = (endTimestamp - _startTimestamp.Value) / Stopwatch.Frequency * TimeSpan.TicksPerSecond;
                 if (durationInTicks >= _maxIdleTime)
                 {
+                    if (DateTime.isAccurateButSlow)
+                    {
+                        var previousDateTime = System.DateTime.UtcNow;
+                        while (previousDateTime == System.DateTime.UtcNow) { }
+                    }
                     _startTimestamp.Value = Stopwatch.GetTimestamp();
                     _startTime.Value = System.DateTime.UtcNow;
                     return _startTime.Value;
