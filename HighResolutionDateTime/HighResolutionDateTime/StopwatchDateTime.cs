@@ -15,15 +15,17 @@ namespace HighResolutionDateTime
         // Time after which it is necessary to synchronize _startTimestamp with System.DateTime to avoid drifts
         internal long _maxIdleTime = System.TimeSpan.FromSeconds(10).Ticks;
 
-        private readonly ThreadLocal<double> _startTimestamp;
-
         private readonly ThreadLocal<System.DateTime> _startTime;
+
+        private readonly ThreadLocal<double> _startTimestamp;
 
         // https://referencesource.microsoft.com/#system/services/monitoring/system/diagnosticts/Stopwatch.cs
         // performance-counter frequency, in counts per ticks.
         // This can speed up conversion from high frequency performance-counter 
         // to ticks.
         private static readonly double tickFrequency = System.TimeSpan.TicksPerSecond / Stopwatch.Frequency;
+
+        private readonly ThreadLocal<System.DateTime> previousTime;
 
         /// <summary>
         /// Creates an instance of the <see cref="StopwatchDateTime"/>.
@@ -40,11 +42,11 @@ namespace HighResolutionDateTime
             So a 15ms delay in reading System.DateTime.UtcNow caused the return value to change by 15.625ms in just 625us */
             if (DateTime.isAccurateButSlow)
             {
-                var previousDateTime = System.DateTime.UtcNow;
-                while (previousDateTime == System.DateTime.UtcNow) { }
+                DateTime.WaitForIncrease();
             }
-            _startTimestamp = new ThreadLocal<double>(() => Stopwatch.GetTimestamp(), false);
             _startTime = new ThreadLocal<System.DateTime>(() => System.DateTime.UtcNow, false);
+            _startTimestamp = new ThreadLocal<double>(() => Stopwatch.GetTimestamp(), false);
+            previousTime = new ThreadLocal<System.DateTime>(() => System.DateTime.MinValue, false);
         }
         public System.DateTime UtcNow
         {
@@ -58,15 +60,24 @@ namespace HighResolutionDateTime
                 {
                     if (DateTime.isAccurateButSlow)
                     {
-                        var previousDateTime = System.DateTime.UtcNow;
-                        while (previousDateTime == System.DateTime.UtcNow) { }
+                        DateTime.WaitForIncrease();
+                    }
+                    _startTime.Value = System.DateTime.UtcNow;
+
+                    // fixes https://github.com/Anonymous87549236/HighResolutionDateTime/issues/1
+                    while (previousTime.Value > _startTime.Value)
+                    {
+                        DateTime.WaitForIncrease();
+                        _startTime.Value = System.DateTime.UtcNow;
                     }
                     _startTimestamp.Value = Stopwatch.GetTimestamp();
-                    _startTime.Value = System.DateTime.UtcNow;
+                    previousTime.Value = _startTime.Value;
+
                     return _startTime.Value;
                 }
 
-                return _startTime.Value.AddTicks(unchecked((long)durationInTicks));
+                previousTime.Value = _startTime.Value.AddTicks(unchecked((long)durationInTicks));
+                return previousTime.Value;
             }
         }
 
@@ -77,6 +88,7 @@ namespace HighResolutionDateTime
         {
             _startTime.Dispose();
             _startTimestamp.Dispose();
+            previousTime.Dispose();
         }
     }
 }

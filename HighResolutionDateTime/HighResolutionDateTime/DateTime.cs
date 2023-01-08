@@ -179,8 +179,7 @@ namespace HighResolutionDateTime
                     default:
                         if (isAccurateButSlow)
                         {
-                            var previousDateTime = System.DateTime.UtcNow;
-                            while (previousDateTime == System.DateTime.UtcNow) { }
+                            WaitForIncrease();
                         }
                         return System.DateTime.Now;
                 }
@@ -227,8 +226,7 @@ namespace HighResolutionDateTime
                     default:
                         if (isAccurateButSlow)
                         {
-                            var previousDateTime = System.DateTime.UtcNow;
-                            while (previousDateTime == System.DateTime.UtcNow) { }
+                            WaitForIncrease();
                         }
                         return System.DateTime.UtcNow;
                 }
@@ -345,6 +343,12 @@ namespace HighResolutionDateTime
             }
             StopwatchDateTime = new StopwatchDateTime();
             StopwatchDateTimeDisposalState = StopwatchDateTimeDisposalState.NotDisposed;
+        }
+
+        internal static void WaitForIncrease()
+        {
+            var previousDateTime = System.DateTime.UtcNow;
+            while (previousDateTime == System.DateTime.UtcNow) { }
         }
 #endif
     }
