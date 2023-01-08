@@ -13,7 +13,7 @@ namespace HighResolutionDateTime
     internal class StopwatchDateTime : IDisposable
     {
         // Time after which it is necessary to synchronize _startTimestamp with System.DateTime to avoid drifts
-        internal long _maxIdleTime = TimeSpan.FromSeconds(10).Ticks;
+        internal long _maxIdleTime = System.TimeSpan.FromSeconds(10).Ticks;
 
         private readonly ThreadLocal<double> _startTimestamp;
 
@@ -23,7 +23,7 @@ namespace HighResolutionDateTime
         // performance-counter frequency, in counts per ticks.
         // This can speed up conversion from high frequency performance-counter 
         // to ticks.
-        private static readonly double tickFrequency = TimeSpan.TicksPerSecond / Stopwatch.Frequency;
+        private static readonly double tickFrequency = System.TimeSpan.TicksPerSecond / Stopwatch.Frequency;
 
         /// <summary>
         /// Creates an instance of the <see cref="StopwatchDateTime"/>.

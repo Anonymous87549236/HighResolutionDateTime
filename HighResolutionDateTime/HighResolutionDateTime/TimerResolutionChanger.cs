@@ -10,7 +10,7 @@ namespace HighResolutionDateTime
         private static extern uint NtQueryTimerResolution(out uint min, out uint max, out uint current);
 
         [DllImport("ntdll.dll", SetLastError = true)]
-        internal static extern uint NtSetTimerResolution(uint desiredResolution, bool setResolution, ref uint currentResolution);
+        private static extern uint NtSetTimerResolution(uint desiredResolution, bool setResolution, ref uint currentResolution);
 
         // in 100 ns
         public static readonly uint maxTimerResolution;
