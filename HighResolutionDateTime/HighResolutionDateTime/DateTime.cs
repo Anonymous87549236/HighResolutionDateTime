@@ -93,22 +93,37 @@ namespace HighResolutionDateTime
                 catch (DllNotFoundException) { }
                 catch (EntryPointNotFoundException) { }
             }
+            if ((source == HighResolutionDateTimeSource.GetSystemTimePreciseAsFileTime) && s_isLeapSecondsSupportedSystem)
+            {
+                FullSystemTime time = new FullSystemTime();
+                try
+                {
+                    GetSystemTimeWithLeapSecondsHandling(out time, ref ticks);
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    source = HighResolutionDateTimeSource.None;
+                }
+            }
+
+            // https://github.com/dotnet/runtime/blob/main/src/libraries/System.Private.CoreLib/src/System/DateTime.Windows.cs
             if (source == HighResolutionDateTimeSource.GetSystemTimePreciseAsFileTime)
             {
-                CompatibilitySwitches.InitializeSwitches();
-                if (s_isLeapSecondsSupportedSystem)
+                source = HighResolutionDateTimeSource.None;
+                for (int i = 0; i < 10; i++)
                 {
-                    FullSystemTime time = new FullSystemTime();
-                    try
+                    long systemTimeResult, preciseSystemTimeResult;
+                    GetSystemTimeAsFileTime(out systemTimeResult);
+                    GetSystemTimePreciseAsFileTime(out preciseSystemTimeResult);
+
+                    if (Math.Abs(preciseSystemTimeResult - systemTimeResult) <= 100 * TicksPerMillisecond)
                     {
-                        GetSystemTimeWithLeapSecondsHandling(out time, ref ticks);
-                    }
-                    catch (ArgumentOutOfRangeException)
-                    {
-                        source = HighResolutionDateTimeSource.None;
+                        source = HighResolutionDateTimeSource.GetSystemTimePreciseAsFileTime; // use the precise version
+                        break;
                     }
                 }
             }
+
             if ((source < HighResolutionDateTimeSource.Stopwatch) && System.Diagnostics.Stopwatch.IsHighResolution)
             {
                 source = HighResolutionDateTimeSource.Stopwatch;
@@ -116,6 +131,7 @@ namespace HighResolutionDateTime
             switch (source)
             {
                 case HighResolutionDateTimeSource.GetSystemTimePreciseAsFileTime:
+                    CompatibilitySwitches.InitializeSwitches();
                     break;
                 case HighResolutionDateTimeSource.Stopwatch:
                     StopwatchDateTime = new StopwatchDateTime();
@@ -250,6 +266,11 @@ namespace HighResolutionDateTime
             internal ushort wMillisecond;
             internal long hundredNanoSecond;
         };
+
+        [System.Security.SecurityCritical]  // auto-generated
+        [MethodImplAttribute(MethodImplOptions.InternalCall)]
+        [DllImport("Kernel32.dll", CallingConvention = CallingConvention.Winapi), SuppressUnmanagedCodeSecurity]
+        internal static extern void GetSystemTimeAsFileTime(out long fileTime);
 
         [System.Security.SecurityCritical]  // auto-generated
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
